@@ -77,6 +77,52 @@ airflow scheduler &
 
 The DAG will run daily at 18:00 UTC. Update `schedule_interval` in the DAG file to change cadence.
 
+Biweekly report email
+---------------------
+
+`send_report_email.py` builds a summary of the trailing two weeks of prices from the DuckDB table and emails it as a plain-text + HTML message.
+
+```bash
+# Preview the report without sending anything
+python send_report_email.py --dry-run
+
+# Send it
+python send_report_email.py --from etf@example.com --to "you@example.com, ops@example.com"
+```
+
+Options:
+- `--period-days` — length of the reporting window (default `14`, i.e. two weeks)
+- `--end` — end date (`YYYY-MM-DD`); defaults to the latest date stored in the table
+- `--db` / `--table` — DuckDB file and table (default `etf_data.duckdb` / `etf_prices`)
+- `--subject` — subject template, supports `{start}` and `{end}`
+- `--ssl` for implicit TLS (port 465); `--no-starttls` to disable STARTTLS
+
+Every option can also be supplied through the environment, which is how the Airflow task is configured:
+
+| Variable | Purpose |
+| --- | --- |
+| `EMAIL_FROM` | Sender address |
+| `EMAIL_TO` | Recipients, comma separated |
+| `EMAIL_SUBJECT` | Subject template (optional) |
+| `SMTP_HOST` / `SMTP_PORT` | SMTP server (defaults `localhost:587`) |
+| `SMTP_USER` / `SMTP_PASSWORD` | Credentials, if the server requires them |
+| `SMTP_SSL` / `SMTP_STARTTLS` | `true`/`false` TLS mode (defaults: SSL off, STARTTLS on) |
+| `ETF_DB` / `ETF_TABLE` / `ETF_PERIOD_DAYS` | Report source and window |
+
+Scheduling every two weeks
+--------------------------
+
+`airflow_dags/etf_report_email_dag.py` runs the script on a fortnightly cadence. Cron cannot express "every two weeks", so the DAG uses `schedule_interval=timedelta(weeks=2)` anchored on its `start_date` (07:00 UTC); change `start_date` to move which day the runs land on.
+
+The task does not override `env`, so it inherits the Airflow worker's environment — put `EMAIL_FROM`, `EMAIL_TO` and the `SMTP_*` variables there (for example in the scheduler/worker systemd unit or the Airflow `.env`). Update `VENV_PY` and `REPO_DIR` in the DAG if your paths differ.
+
+Without Airflow, a crontab entry gets the same cadence by running every two weeks from a fixed epoch:
+
+```cron
+# 07:00 UTC on days that fall on an even fortnight boundary
+0 7 * * 1 [ $(( ($(date +\%s) / 604800) \% 2 )) -eq 0 ] && cd /path/to/etfscanner && .venv/bin/python send_report_email.py
+```
+
 GitHub Actions deploy workflow
 ------------------------------
 
