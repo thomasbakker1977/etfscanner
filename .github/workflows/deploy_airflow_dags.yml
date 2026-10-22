@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'airflow_dags/**'
+  workflow_dispatch:
 
 jobs:
   deploy:
