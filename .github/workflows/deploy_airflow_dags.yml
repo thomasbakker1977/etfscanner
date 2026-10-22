@@ -4,11 +4,15 @@ on:
   push:
     paths:
       - 'airflow_dags/**'
+  workflow_dispatch:
 
 jobs:
   deploy:
     name: Deploy DAGs to Airflow host
     runs-on: ubuntu-latest
+    env:
+      # The secrets context is not allowed in step-level `if:`, so expose it via env
+      AIRFLOW_RESTART: ${{ secrets.AIRFLOW_RESTART }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,9 +26,10 @@ jobs:
           port: ${{ secrets.AIRFLOW_PORT }}
           source: "airflow_dags/*"
           target: ${{ secrets.AIRFLOW_DAGS_DIR }}
+          strip_components: 1
 
       - name: (Optional) Restart Airflow services via SSH
-        if: ${{ secrets.AIRFLOW_RESTART == 'true' }}
+        if: env.AIRFLOW_RESTART == 'true'
         uses: appleboy/ssh-action@v0.1.6
         with:
           host: ${{ secrets.AIRFLOW_HOST }}
